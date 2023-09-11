@@ -80,7 +80,6 @@ public:
         }
 
         double bendingEnergy = 0.5 * displacement.transpose() * bendingM_ * displacement;
-        std::cout << "BE " << bendingEnergy << " " << displacement.norm() << std::endl;
         result += bendingEnergy;
 
         if (derivative)

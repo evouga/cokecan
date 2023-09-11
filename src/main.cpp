@@ -27,8 +27,8 @@ double crushAmount;
 
 double triangleArea;
 
-int numSteps;
-double tol;
+float rotAxis[3];
+int rotSteps;
 
 void lameParameters(double& alpha, double& beta)
 {
@@ -37,10 +37,11 @@ void lameParameters(double& alpha, double& beta)
     beta = young / 2.0 / (1.0 + poisson);
 }
 
-void runSimulation(
+void testInvariance(
     const LibShell::MeshConnectivity& mesh,
     Eigen::MatrixXd& curPos,
-    double crushRatio,
+    Eigen::Vector3d rotAxis,
+    int rotSteps,
     double thickness,
     double lameAlpha,
     double lameBeta)
@@ -72,43 +73,31 @@ void runSimulation(
     Eigen::MatrixXd restPos = curPos;
     Eigen::VectorXd restEdgeDOFs = edgeDOFs;
 
-    NeohookeanShellEnergy energyModel(mesh, restState, lameAlpha, lameBeta);
-    //QuadraticBendingShellEnergy energyModel(mesh, restState, restPos, restEdgeDOFs, lameAlpha, lameBeta);
+    //NeohookeanShellEnergy energyModel(mesh, restState, lameAlpha, lameBeta);
+    QuadraticBendingShellEnergy energyModel(mesh, restState, restPos, restEdgeDOFs, lameAlpha, lameBeta);
 
-    double reg = 1e-6;
-    for (int j = 1; j <= numSteps; j++)
+    rotAxis /= rotAxis.norm();
+    Eigen::Matrix3d R;
+    R = Eigen::AngleAxisd(2.0 * 3.1415926535898 / rotSteps, rotAxis);
+
+
+    std::cout << "Begin experiment, " << rotSteps << " steps about axis " << rotAxis.transpose() << std::endl;
+    for (int j = 1; j <= rotSteps; j++)
     {
-        double prevt = double(j - 1) / double(numSteps);
-        double t = double(j) / double(numSteps);
-        double curRatio = t * crushRatio + (1 - t);
-        double prevRatio = prevt * crushRatio + (1 - prevt);
-        double curHeight = cokeHeight * curRatio;
-
-        // uniformly crush everything
-        for (int i = 0; i < curPos.rows(); i++)
-            curPos(i, 2) *= curRatio / prevRatio;
-
-        // pin boundaries just in case
-        for (int i : topVertices)
-            curPos(i, 2) = curHeight;
-        for (int i : bottomVertices)
-            curPos(i, 2) = 0;
-
-        takeOneStep(energyModel, curPos, edgeDOFs, fixed, tol, reg);
-        std::stringstream filename;
-        filename << "step-" << j << ".ply";
-        igl::writePLY(filename.str(), curPos, mesh.faces());
-        std::cout << "####################" << std::endl;
-        std::cout << "Finished Step " << j << std::endl;
-        std::cout << "####################" << std::endl;
-        polyscope::registerSurfaceMesh(filename.str(), curPos, mesh.faces());
+        // rotate mesh
+        curPos = curPos * R.transpose();
+        double E = energyModel.elasticEnergy(curPos, edgeDOFs, NULL, NULL);
+        std::cout << E << std::endl;
     }
+    std::cout << "End experiment" << std::endl;
 }
 
 int main(int argc, char* argv[])
 {
-    numSteps = 10;
-    tol = 1e-8;
+    rotAxis[0] = 1.0;
+    rotAxis[1] = 1.0;
+    rotAxis[2] = 1.0;
+    rotSteps = 100;
 
     cokeRadius = 0.0325;
     cokeHeight = 0.122;
@@ -151,19 +140,21 @@ int main(int argc, char* argv[])
         }
 
 
-        if (ImGui::CollapsingHeader("Optimization", ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::CollapsingHeader("Test", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::InputInt("Num Steps", &numSteps);
-            ImGui::InputDouble("Newton Tolerance", &tol);
-            if (ImGui::Button("Crush", ImVec2(-1, 0)))
+            ImGui::InputFloat3("Rotation Axis", rotAxis, 4);
+            ImGui::InputInt("Rotation Steps", &rotSteps);
+            if (ImGui::Button("Test Rotation-invariance", ImVec2(0 - 1, 0)))
             {
                 double lameAlpha, lameBeta;
                 lameParameters(lameAlpha, lameBeta);
                 Eigen::MatrixXd curPos = origV;
+                polyscope::registerSurfaceMesh("Perturbed Mesh", curPos, F);
+
                 // set up mesh connectivity
                 LibShell::MeshConnectivity mesh(F);
-                runSimulation(mesh, curPos, crushAmount, thickness, lameAlpha, lameBeta);
-                polyscope::registerSurfaceMesh("Crushed Result", curPos, F);
+                testInvariance(mesh, curPos, Eigen::Vector3d(rotAxis[0], rotAxis[1], rotAxis[2]), rotSteps, thickness, lameAlpha, lameBeta);
+                
             }
         }
     };

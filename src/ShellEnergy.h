@@ -26,10 +26,9 @@ class NeohookeanShellEnergy : public ShellEnergy
 public:
     NeohookeanShellEnergy(
         const LibShell::MeshConnectivity& mesh,
-        const LibShell::RestState& restState,
-        double lameAlpha, double lameBeta
+        const LibShell::RestState& restState
     )
-        : mesh_(mesh), restState_(restState), mat_(lameAlpha, lameBeta) {}
+        : mesh_(mesh), restState_(restState), mat_() {}
 
     virtual double elasticEnergy(
         const Eigen::MatrixXd& curPos,
@@ -52,12 +51,11 @@ public:
         const LibShell::MeshConnectivity& mesh,
         const LibShell::RestState& restState,
         const Eigen::MatrixXd &restPos,
-        const Eigen::VectorXd &restEdgeDOFs,
-        double lameAlpha, double lameBeta
+        const Eigen::VectorXd &restEdgeDOFs
     )
-        : mesh_(mesh), restState_(restState), mat_(lameAlpha, lameBeta), restPos_(restPos), restEdgeDOFs_(restEdgeDOFs) {
+        : mesh_(mesh), restState_(restState), mat_(), restPos_(restPos), restEdgeDOFs_(restEdgeDOFs) {
         int nverts = restPos.rows();        
-        bendingMatrix<LibShell::MidedgeAverageFormulation>(mesh, restPos, restEdgeDOFs, restState, lameAlpha, lameBeta, bendingMcoeffs_);
+        bendingMatrix<LibShell::MidedgeAverageFormulation>(mesh, restPos, restEdgeDOFs, restState, bendingMcoeffs_);
         bendingM_.resize(3 * nverts, 3 * nverts);
         bendingM_.setFromTriplets(bendingMcoeffs_.begin(), bendingMcoeffs_.end());
     }

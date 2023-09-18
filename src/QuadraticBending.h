@@ -12,8 +12,7 @@ void bendingMatrix(
     const LibShell::MeshConnectivity& mesh,
     const Eigen::MatrixXd& restPos,
     const Eigen::VectorXd& restExtraDOFs,
-    const LibShell::RestState& restState,
-    double lameAlpha, double lameBeta,
+    const LibShell::RestState& restState,    
     std::vector<Eigen::Triplet<double> >& Mcoeffs
 );
 

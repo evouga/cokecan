@@ -54,6 +54,8 @@ void runSimulation(
 
     // set uniform thicknesses
     restState.thicknesses.resize(mesh.nFaces(), thickness);
+    restState.lameAlpha.resize(mesh.nFaces(), lameAlpha);
+    restState.lameBeta.resize(mesh.nFaces(), lameAlpha);
 
     // initialize first and second fundamental forms to those of input mesh
     LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::firstFundamentalForms(mesh, curPos, restState.abars);
@@ -72,8 +74,8 @@ void runSimulation(
     Eigen::MatrixXd restPos = curPos;
     Eigen::VectorXd restEdgeDOFs = edgeDOFs;
 
-    NeohookeanShellEnergy energyModel(mesh, restState, lameAlpha, lameBeta);
-    //QuadraticBendingShellEnergy energyModel(mesh, restState, restPos, restEdgeDOFs, lameAlpha, lameBeta);
+    NeohookeanShellEnergy energyModel(mesh, restState);
+    //QuadraticBendingShellEnergy energyModel(mesh, restState, restPos, restEdgeDOFs);
 
     double reg = 1e-6;
     for (int j = 1; j <= numSteps; j++)

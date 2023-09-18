@@ -12,8 +12,7 @@ void bendingMatrixTerm(
     const LibShell::MeshConnectivity& mesh,
     const Eigen::MatrixXd& restPos,
     const Eigen::VectorXd& restExtraDOFs,
-    const LibShell::RestState& restState,
-    double lameAlpha, double lameBeta,
+    const LibShell::RestState& restState,    
     int face,
     Eigen::Matrix<double, 18 + 3 * SFF::numExtraDOFs, 18 + 3 * SFF::numExtraDOFs>& matrixTerm)
 {
@@ -30,6 +29,9 @@ void bendingMatrixTerm(
     double dA = 0.5 * sqrt(rs.abars[face].determinant());
 
     Matrix<double, 1, 18 + 3 * nedgedofs> inner = bderiv.transpose() * Map<Vector4d>(abarinv.data());
+    double lameAlpha = ((LibShell::MonolayerRestState&)restState).lameAlpha[face];
+    double lameBeta = ((LibShell::MonolayerRestState&)restState).lameBeta[face];
+
     matrixTerm = lameAlpha * inner.transpose() * inner;
 
     Matrix<double, 1, 18 + 3 * nedgedofs> inner00 = abarinv(0, 0) * bderiv.row(0) + abarinv(0, 1) * bderiv.row(2);
@@ -49,8 +51,7 @@ void bendingMatrix(
     const LibShell::MeshConnectivity& mesh,
     const Eigen::MatrixXd& restPos,
     const Eigen::VectorXd& restExtraDOFs,
-    const LibShell::RestState& restState,
-    double lameAlpha, double lameBeta,
+    const LibShell::RestState& restState,    
     std::vector<Eigen::Triplet<double> >& Mcoeffs
 )
 {
@@ -63,7 +64,7 @@ void bendingMatrix(
     for (int i = 0; i < nfaces; i++)
     {
         Eigen::Matrix<double, 18 + 3 * nedgedofs, 18 + 3 * nedgedofs> hess;
-        bendingMatrixTerm<SFF>(mesh, restPos, restExtraDOFs, restState, lameAlpha, lameBeta, i, hess);
+        bendingMatrixTerm<SFF>(mesh, restPos, restExtraDOFs, restState, i, hess);
         for (int j = 0; j < 3; j++)
         {
             for (int k = 0; k < 3; k++)
@@ -111,7 +112,6 @@ template void bendingMatrix<LibShell::MidedgeAngleSinFormulation>(
     const Eigen::MatrixXd& restPos,
     const Eigen::VectorXd& restExtraDOFs,
     const LibShell::RestState& restState,
-    double lameAlpha, double lameBeta,
     std::vector<Eigen::Triplet<double> >& Mcoeffs
 );
 
@@ -120,7 +120,6 @@ template void bendingMatrix<LibShell::MidedgeAngleTanFormulation>(
     const Eigen::MatrixXd& restPos,
     const Eigen::VectorXd& restExtraDOFs,
     const LibShell::RestState& restState,
-    double lameAlpha, double lameBeta,
     std::vector<Eigen::Triplet<double> >& Mcoeffs
     );
 
@@ -129,6 +128,5 @@ template void bendingMatrix<LibShell::MidedgeAverageFormulation>(
     const Eigen::MatrixXd& restPos,
     const Eigen::VectorXd& restExtraDOFs,
     const LibShell::RestState& restState,
-    double lameAlpha, double lameBeta,
     std::vector<Eigen::Triplet<double> >& Mcoeffs
     );

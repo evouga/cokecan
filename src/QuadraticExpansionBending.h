@@ -1,5 +1,5 @@
-#ifndef QUADRATICBENDING_H
-#define QUADRATICBENDING_H
+#ifndef QUADRATICEXPANSIONBENDING_H
+#define QUADRATICEXPANSIONBENDING_H
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>

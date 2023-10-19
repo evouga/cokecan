@@ -1,4 +1,4 @@
-#include "QuadraticBending.h"
+#include "QuadraticExpansionBending.h"
 #include "../include/MeshConnectivity.h"
 #include "../include/RestState.h"
 #include <Eigen/Sparse>

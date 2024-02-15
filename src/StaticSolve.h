@@ -51,7 +51,7 @@ void takeOneStep(const ShellEnergy &energyModel,
         Eigen::VectorXd derivative;
         std::vector<Eigen::Triplet<double> > hessian;
 
-        double energy = energyModel.elasticEnergy(curPos, curEdgeDOFs, &derivative, &hessian);
+        double energy = energyModel.elasticEnergy(curPos, curEdgeDOFs, false, &derivative, &hessian);
 
         Eigen::SparseMatrix<double> H(fullDOFs, fullDOFs);
         H.setFromTriplets(hessian.begin(), hessian.end());
@@ -98,7 +98,7 @@ void takeOneStep(const ShellEnergy &energyModel,
 
 
 
-            double newenergy = energyModel.elasticEnergy(newPos, newEdgeDofs, &derivative, NULL);
+            double newenergy = energyModel.elasticEnergy(newPos, newEdgeDofs, false, &derivative, NULL);
             force = -P * derivative;
 
             double forceResidual = force.norm();

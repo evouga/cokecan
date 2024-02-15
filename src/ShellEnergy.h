@@ -7,6 +7,7 @@
 #include "../include/RestState.h"
 #include "../include/MaterialModel.h"
 #include "../include/NeoHookeanMaterial.h"
+#include "../include/StVKMaterial.h"
 #include "../include/MidedgeAverageFormulation.h"
 #include "../include/ElasticShell.h"
 #include "QuadraticExpansionBending.h"
@@ -18,8 +19,9 @@ class ShellEnergy
 public:
     virtual double elasticEnergy(
         const Eigen::MatrixXd& curPos,
-        const Eigen::VectorXd& curEdgeDOFs,
-        Eigen::VectorXd* derivative, // positions, then thetas
+        const Eigen::VectorXd& curEdgeDOFs,        
+        bool bendingOnly,
+        Eigen::VectorXd* derivative, 
         std::vector<Eigen::Triplet<double> >* hessian) const = 0;
 };
 
@@ -35,10 +37,14 @@ public:
     virtual double elasticEnergy(
         const Eigen::MatrixXd& curPos,
         const Eigen::VectorXd& curEdgeDOFs,
-        Eigen::VectorXd* derivative, // positions, then thetas
+        bool bendingOnly,
+        Eigen::VectorXd* derivative, 
         std::vector<Eigen::Triplet<double> >* hessian) const
     {
-        return LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, derivative, hessian);
+        int whichTerms = LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_BENDING;
+        if(!bendingOnly)
+            whichTerms |= LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_STRETCHING;
+        return LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, whichTerms, derivative, hessian);
     }
 
     const LibShell::MeshConnectivity& mesh_;
@@ -65,11 +71,20 @@ public:
     virtual double elasticEnergy(
         const Eigen::MatrixXd& curPos,
         const Eigen::VectorXd& curEdgeDOFs,
-        Eigen::VectorXd* derivative, // positions, then thetas
+        bool bendingOnly,
+        Eigen::VectorXd* derivative, 
         std::vector<Eigen::Triplet<double> >* hessian) const
     {
-        double result = LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_STRETCHING, derivative, hessian);        
+        double result = 0;
         int nverts = curPos.rows();
+        
+        if (derivative)
+        {
+            derivative->resize(3 * nverts);
+            derivative->setZero();
+        }
+        if(!bendingOnly)
+            result += LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_STRETCHING, derivative, hessian);
         Eigen::VectorXd displacement(3 * nverts);
         for (int i = 0; i < nverts; i++)
         {
@@ -186,11 +201,22 @@ public:
     virtual double elasticEnergy(
         const Eigen::MatrixXd& curPos,
         const Eigen::VectorXd& curEdgeDOFs,
+        bool bendingOnly,
         Eigen::VectorXd* derivative, // positions, then thetas
         std::vector<Eigen::Triplet<double> >* hessian) const
     {
-        double result = LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_STRETCHING, derivative, hessian);
+        double result = 0;
         int nverts = curPos.rows();
+
+        if (derivative)
+        {
+            derivative->resize(3 * nverts);
+            derivative->setZero();
+        }
+        
+        if(!bendingOnly)
+            result += LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_STRETCHING, derivative, hessian);
+        
         Eigen::VectorXd displacement(3 * nverts);
         for (int i = 0; i < nverts; i++)
         {

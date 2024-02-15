@@ -7,6 +7,7 @@
 #include "igl/boundary_loop.h"
 
 void makeHalfCylinder(double radius, double height, double triangleArea,
+    Eigen::MatrixXd& flatV,
     Eigen::MatrixXd& V,
     Eigen::MatrixXi& F)
 {
@@ -99,12 +100,16 @@ void makeHalfCylinder(double radius, double height, double triangleArea,
 
     int nverts = V2.rows();
 
+    flatV.resize(nverts, 3);
     Eigen::MatrixXd rolledV(nverts, 3);
 
     for (int i = 0; i < nverts; i++)
     {
         Eigen::Vector2d q = V2.row(i).transpose();
         Eigen::Vector3d rolledq;
+        flatV(i, 0) = q[0];
+        flatV(i, 1) = q[1];
+        flatV(i, 2) = 0;
         rolledq[0] = radius * std::cos(q[0] / radius);
         rolledq[1] = radius * std::sin(q[0] / radius);
         rolledq[2] = q[1];
@@ -115,7 +120,7 @@ void makeHalfCylinder(double radius, double height, double triangleArea,
     F = F2;
 }
 
-void getBoundaries(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F, std::vector<int>& bdryVertices)
+void getBoundaries(const Eigen::MatrixXi& F, std::vector<int>& bdryVertices)
 {
     std::vector<std::vector<int> > boundaries;
     igl::boundary_loop(F, boundaries);

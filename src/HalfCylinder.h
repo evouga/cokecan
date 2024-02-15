@@ -5,10 +5,11 @@
 #include <vector>
 
 void makeHalfCylinder(double radius, double height, double triangleArea,
+    Eigen::MatrixXd& flatV,
     Eigen::MatrixXd& V,
     Eigen::MatrixXi& F);
 
 
-void getBoundaries(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F, std::vector<int>& bdryVertices);
+void getBoundaries(const Eigen::MatrixXi& F, std::vector<int>& bdryVertices);
 
 #endif

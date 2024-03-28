@@ -20,6 +20,7 @@
 
 double cokeRadius;
 double cokeHeight;
+double sphereRadius;
 
 double thickness;
 double poisson;
@@ -27,6 +28,15 @@ double poisson;
 double triangleArea;
 
 double QBEnergy;
+
+enum class MeshType
+{
+    MT_CYLINDER_IRREGULAR,
+    MT_CYLINDER_REGULAR,
+    MT_SPHERE
+};
+
+MeshType curMeshType;
 
 void lameParameters(double& alpha, double& beta)
 {
@@ -40,7 +50,60 @@ struct Energies
     double exact;
     double quadraticbending;
     double neohookean;
+    double neohookeandir;
 };
+
+void optimizeEdgeDOFs(ShellEnergy& energy, const Eigen::MatrixXd& curPos, Eigen::VectorXd& edgeDOFs)
+{
+    double tol = 1e-6;
+    int nposdofs = curPos.rows() * 3;
+    int nedgedofs = edgeDOFs.size();
+
+    std::vector<Eigen::Triplet<double> > Pcoeffs;
+    std::vector<Eigen::Triplet<double> > Icoeffs;
+    for (int i = 0; i < nedgedofs; i++)
+    {
+        Pcoeffs.push_back({ i, nposdofs + i, 1.0 });
+        Icoeffs.push_back({ i, i, 1.0 });
+    }
+    Eigen::SparseMatrix<double> P(nedgedofs, nposdofs + nedgedofs);
+    P.setFromTriplets(Pcoeffs.begin(), Pcoeffs.end());
+    Eigen::SparseMatrix<double> I(nedgedofs, nedgedofs);
+    I.setFromTriplets(Icoeffs.begin(), Icoeffs.end());
+
+    double reg = 1e-6;
+    while (true)
+    {
+        std::vector<Eigen::Triplet<double> > Hcoeffs;
+        Eigen::VectorXd F;
+        double origEnergy = energy.elasticEnergy(curPos, edgeDOFs, true, &F, &Hcoeffs);
+        Eigen::VectorXd PF = P * F;
+        std::cout << "Force resid now: " << PF.norm() << std::endl;
+        if (PF.norm() < tol)
+            return;
+        Eigen::SparseMatrix<double> H(nposdofs + nedgedofs, nposdofs + nedgedofs);
+        Eigen::SparseMatrix<double> PTHP = P.transpose() * H * P;
+        Eigen::SparseMatrix<double> M = PTHP + reg * I;
+        Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver(M);
+        Eigen::VectorXd update = solver.solve(-PF);
+        if (solver.info() != Eigen::Success) {
+            std::cout << "Solve failed" << std::endl;
+            reg *= 2.0;
+            continue;
+        }
+        Eigen::VectorXd newedgeDOFs = edgeDOFs + update;
+        double newenergy = energy.elasticEnergy(curPos, newedgeDOFs, true, NULL, NULL);
+        if (newenergy > origEnergy)
+        {
+            std::cout << "Not a descent step, " << origEnergy << " -> " << newenergy << std::endl;
+            reg *= 2.0;
+            continue;
+        }
+        edgeDOFs = newedgeDOFs;
+        reg *= 0.5;
+    }
+}
+
 
 Energies measureEnergy(
     const LibShell::MeshConnectivity& mesh,
@@ -60,30 +123,45 @@ Energies measureEnergy(
     Eigen::VectorXd edgeDOFs;
     LibShell::MidedgeAverageFormulation::initializeExtraDOFs(edgeDOFs, mesh, restPos);
 
+    Eigen::VectorXd diredgeDOFs;
+    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(diredgeDOFs, mesh, restPos);
+
     // initialize the rest geometry of the shell
     LibShell::MonolayerRestState restState;
+    LibShell::MonolayerRestState dirrestState;
 
     // set uniform thicknesses
     restState.thicknesses.resize(mesh.nFaces(), thickness);
     restState.lameAlpha.resize(mesh.nFaces(), lameAlpha);
     restState.lameBeta.resize(mesh.nFaces(), lameBeta);
+    dirrestState.thicknesses.resize(mesh.nFaces(), thickness);
+    dirrestState.lameAlpha.resize(mesh.nFaces(), lameAlpha);
+    dirrestState.lameBeta.resize(mesh.nFaces(), lameBeta);
 
     // initialize first and second fundamental forms to those of input mesh
     LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::firstFundamentalForms(mesh, restPos, restState.abars);
     LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::secondFundamentalForms(mesh, restPos, edgeDOFs, restState.bbars);
+    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::firstFundamentalForms(mesh, restPos, dirrestState.abars);
+    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::secondFundamentalForms(mesh, restPos, diredgeDOFs, dirrestState.bbars);
 
     // Make the half-cylinder rest-flat
     for (int i = 0; i < mesh.nFaces(); i++)
         restState.bbars[i].setZero();
 
     Eigen::VectorXd restEdgeDOFs = edgeDOFs;
-
+    
     NeohookeanShellEnergy nhenergyModel(mesh, restState);
+    NeohookeanDirectorShellEnergy nhdenergyModel(mesh, dirrestState);
     QuadraticBendingShellEnergy qbenergyModel(mesh, restState, restPos, restEdgeDOFs);
 
     Eigen::VectorXd nhF;
+    Eigen::VectorXd nhdF;
     Eigen::VectorXd qbF;
+
+    optimizeEdgeDOFs(nhdenergyModel, curPos, diredgeDOFs);
+
     result.neohookean = nhenergyModel.elasticEnergy(curPos, edgeDOFs, true, &nhF, NULL);
+    result.neohookeandir = nhdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, &nhdF, NULL);
     result.quadraticbending = qbenergyModel.elasticEnergy(curPos, edgeDOFs, true, &qbF, NULL);
 
     int nverts = curPos.rows();
@@ -128,8 +206,11 @@ int main(int argc, char* argv[])
 {
     cokeRadius = 0.0325;
     cokeHeight = 0.122;
+    sphereRadius = 0.05;
 
     triangleArea = 0.000001;
+
+    curMeshType = MeshType::MT_CYLINDER_IRREGULAR;
 
     Energies curenergies;
     QBEnergy = 0;
@@ -139,7 +220,7 @@ int main(int argc, char* argv[])
 
 
     // set up material parameters
-    thickness = 0.00010;
+    thickness = 1.0;// 0.00010;
     poisson = 1.0 / 2.0;
 
     // load mesh
@@ -148,64 +229,26 @@ int main(int argc, char* argv[])
     Eigen::MatrixXd rolledV;
     Eigen::MatrixXi F;
 
-    makeHalfCylinder(cokeRadius, cokeHeight, triangleArea, origV, rolledV, F);
+    bool regular = true;
+
+    makeHalfCylinder(regular, cokeRadius, cokeHeight, triangleArea, origV, rolledV, F);
     double lameAlpha, lameBeta;
     lameParameters(lameAlpha, lameBeta);
     LibShell::MeshConnectivity mesh(F);
     double curRadius = cokeRadius;
     double curHeight = cokeHeight;
 
-    curenergies = measureEnergy(mesh, origV, rolledV, thickness, lameAlpha, lameBeta, curRadius, curHeight, nhForces, qbForces);
-    
-    polyscope::init();
-    polyscope::registerSurfaceMesh("Input Mesh", origV, F);
-    auto *surf = polyscope::registerSurfaceMesh("Rolled Mesh", rolledV, F);
-
-    surf->addVertexVectorQuantity("NH Force", nhForces);
-    surf->addVertexVectorQuantity("QB Force", qbForces);
-
-    polyscope::state::userCallback = [&]()
+    int steps = 5;
+    double multiplier = 4;
+    std::ofstream log("log.txt");
+    for (int step = 0; step < steps; step++)
     {
-        bool dirty = false;
-        if (ImGui::CollapsingHeader("Geometry", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::InputDouble("Radius", &cokeRadius);
-            ImGui::InputDouble("Height", &cokeHeight);
-            ImGui::InputDouble("Triangle Area", &triangleArea);
-            if (ImGui::Button("Retriangulate"))
-            {
-                makeHalfCylinder(cokeRadius, cokeHeight, triangleArea, origV, rolledV, F);   
-                polyscope::registerSurfaceMesh("Input Mesh", origV, F);
-                surf = polyscope::registerSurfaceMesh("Rolled Mesh", rolledV, F);
-                curRadius = cokeRadius;
-                curHeight = cokeHeight;
-                dirty = true;                
-            }
-        }
-        if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            if(ImGui::InputDouble("Thickness", &thickness))
-                dirty = true;
-            if(ImGui::InputDouble("Poisson's Ration", &poisson))
-                dirty = true;            
-        }
-
-        if (dirty)
-        {
-            mesh = LibShell::MeshConnectivity(F);
-            lameParameters(lameAlpha, lameBeta);
-            curenergies = measureEnergy(mesh, origV, rolledV, thickness, lameAlpha, lameBeta, curRadius, curHeight, nhForces, qbForces);
-            surf->addVertexVectorQuantity("NH Force", nhForces);
-            surf->addVertexVectorQuantity("QB Force", qbForces);
-        }        
-
-        if (ImGui::CollapsingHeader("Energies", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::Text("Neohookean Shell: %e", curenergies.neohookean);
-            ImGui::Text("Quadratic Bending Shell: %e", curenergies.quadraticbending);
-            ImGui::Text("Exact Shell: %e", curenergies.exact);
-        }
-    };
-
-    polyscope::show();
+        curenergies = measureEnergy(mesh, origV, rolledV, thickness, lameAlpha, lameBeta, curRadius, curHeight, nhForces, qbForces);
+        log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.quadraticbending << std::endl;
+        triangleArea *= multiplier;
+        makeHalfCylinder(regular, cokeRadius, cokeHeight, triangleArea, origV, rolledV, F);
+        mesh = LibShell::MeshConnectivity(F);
+    }
+    
+    
 }

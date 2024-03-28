@@ -8,6 +8,7 @@
 #include "../include/MaterialModel.h"
 #include "../include/NeoHookeanMaterial.h"
 #include "../include/StVKMaterial.h"
+#include "../include/MidedgeAngleTanFormulation.h"
 #include "../include/MidedgeAverageFormulation.h"
 #include "../include/ElasticShell.h"
 #include "QuadraticExpansionBending.h"
@@ -50,6 +51,33 @@ public:
     const LibShell::MeshConnectivity& mesh_;
     const LibShell::RestState& restState_;
     LibShell::NeoHookeanMaterial<LibShell::MidedgeAverageFormulation> mat_;
+};
+
+class NeohookeanDirectorShellEnergy : public ShellEnergy
+{
+public:
+    NeohookeanDirectorShellEnergy(
+        const LibShell::MeshConnectivity& mesh,
+        const LibShell::RestState& restState
+    )
+        : mesh_(mesh), restState_(restState), mat_() {}
+
+    virtual double elasticEnergy(
+        const Eigen::MatrixXd& curPos,
+        const Eigen::VectorXd& curEdgeDOFs,
+        bool bendingOnly,
+        Eigen::VectorXd* derivative,
+        std::vector<Eigen::Triplet<double> >* hessian) const
+    {
+        int whichTerms = LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::EnergyTerm::ET_BENDING;
+        if (!bendingOnly)
+            whichTerms |= LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::EnergyTerm::ET_STRETCHING;
+        return LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, whichTerms, derivative, hessian);
+    }
+
+    const LibShell::MeshConnectivity& mesh_;
+    const LibShell::RestState& restState_;
+    LibShell::NeoHookeanMaterial<LibShell::MidedgeAngleTanFormulation> mat_;
 };
 
 class QuadraticExpansionShellEnergy : public ShellEnergy

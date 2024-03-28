@@ -4,7 +4,7 @@
 #include <Eigen/Core>
 #include <vector>
 
-void makeHalfCylinder(double radius, double height, double triangleArea,
+void makeHalfCylinder(bool regular, double radius, double height, double triangleArea,
     Eigen::MatrixXd& flatV,
     Eigen::MatrixXd& V,
     Eigen::MatrixXi& F);

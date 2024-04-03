@@ -18,6 +18,7 @@
 #include "ShellEnergy.h"
 #include "igl/writePLY.h"
 #include "polyscope/surface_vector_quantity.h"
+#include "igl/principal_curvature.h"
 
 double cokeRadius;
 double cokeHeight;
@@ -121,16 +122,17 @@ Energies measureEnergy(
     double curRadius,
     double curHeight,
     Eigen::MatrixXd &nhForces,
-    Eigen::MatrixXd &qbForces)
-{
+    Eigen::MatrixXd &qbForces) {
     Energies result;
 
     // initialize default edge DOFs (edge director angles)
     Eigen::VectorXd edgeDOFs;
-    LibShell::MidedgeAverageFormulation::initializeExtraDOFs(edgeDOFs, mesh, restPos);
+    LibShell::MidedgeAverageFormulation::initializeExtraDOFs(edgeDOFs, mesh,
+                                                             restPos);
 
     Eigen::VectorXd diredgeDOFs;
-    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(diredgeDOFs, mesh, restPos);
+    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(diredgeDOFs, mesh,
+                                                              restPos);
 
     // initialize the rest geometry of the shell
     LibShell::MonolayerRestState restState;
@@ -145,23 +147,32 @@ Energies measureEnergy(
     dirrestState.lameBeta.resize(mesh.nFaces(), lameBeta);
 
     // initialize first and second fundamental forms to those of input mesh
-    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::firstFundamentalForms(mesh, restPos, restState.abars);
-    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::secondFundamentalForms(mesh, restPos, edgeDOFs, restState.bbars);
-    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::firstFundamentalForms(mesh, restPos, dirrestState.abars);
-    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::secondFundamentalForms(mesh, restPos, diredgeDOFs, dirrestState.bbars);
+    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::
+        firstFundamentalForms(mesh, restPos, restState.abars);
+    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::
+        secondFundamentalForms(mesh, restPos, edgeDOFs, restState.bbars);
+    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::
+        firstFundamentalForms(mesh, restPos, dirrestState.abars);
+    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::
+        secondFundamentalForms(mesh, restPos, diredgeDOFs, dirrestState.bbars);
 
     std::vector<Eigen::Matrix2d> cur_bs;
-    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::secondFundamentalForms(mesh, curPos, edgeDOFs, cur_bs);
+    LibShell::ElasticShell<
+        LibShell::MidedgeAverageFormulation>::secondFundamentalForms(mesh,
+                                                                     curPos,
+                                                                     edgeDOFs,
+                                                                     cur_bs);
 
     // Make the half-cylinder rest-flat
     for (int i = 0; i < mesh.nFaces(); i++)
         restState.bbars[i].setZero();
 
     Eigen::VectorXd restEdgeDOFs = edgeDOFs;
-    
+
     NeohookeanShellEnergy nhenergyModel(mesh, restState);
     NeohookeanDirectorShellEnergy nhdenergyModel(mesh, dirrestState);
-    QuadraticBendingShellEnergy qbenergyModel(mesh, restState, restPos, restEdgeDOFs);
+    QuadraticBendingShellEnergy qbenergyModel(mesh, restState, restPos,
+                                              restEdgeDOFs);
     StVKShellEnergy stvkenergyModel(mesh, restState);
     StVKDirectorShellEnergy stvkdenergyModel(mesh, dirrestState);
 
@@ -171,23 +182,27 @@ Energies measureEnergy(
 
     optimizeEdgeDOFs(nhdenergyModel, curPos, diredgeDOFs);
 
-    result.neohookean = nhenergyModel.elasticEnergy(curPos, edgeDOFs, true, &nhF, NULL);
-    result.neohookeandir = nhdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, &nhdF, NULL);
-    result.quadraticbending = qbenergyModel.elasticEnergy(curPos, edgeDOFs, true, &qbF, NULL);
-    result.stvk = stvkenergyModel.elasticEnergy(curPos, edgeDOFs, true, &stvkF, NULL);
-    result.stvkdir = stvkdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, &stvkdF, NULL);
+    result.neohookean =
+        nhenergyModel.elasticEnergy(curPos, edgeDOFs, true, &nhF, NULL);
+    result.neohookeandir =
+        nhdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, &nhdF, NULL);
+    result.quadraticbending =
+        qbenergyModel.elasticEnergy(curPos, edgeDOFs, true, &qbF, NULL);
+    result.stvk =
+        stvkenergyModel.elasticEnergy(curPos, edgeDOFs, true, &stvkF, NULL);
+    result.stvkdir = stvkdenergyModel.elasticEnergy(curPos, diredgeDOFs, true,
+                                                    &stvkdF, NULL);
 
     int nverts = curPos.rows();
     nhForces.resize(nverts, 3);
     qbForces.resize(nverts, 3);
-    for (int i = 0; i < nverts; i++)
-    {
+    for (int i = 0; i < nverts; i++) {
         nhForces.row(i) = -nhF.segment<3>(3 * i);
         qbForces.row(i) = -qbF.segment<3>(3 * i);
     }
 
     // ground truth energy
-    // W = PI * r    
+    // W = PI * r
     // r(x,y) = (r cos[x/r], r sin[x/r], y)^T
     // dr(x,y) = ((-sin[x/r], 0),
     //            ( cos[x/r], 0),
@@ -204,12 +219,14 @@ Energies measureEnergy(
     b << 1.0 / curRadius, 0, 0, 0;
 
     Eigen::Matrix2d M = abar.inverse() * b;
-    double svnorm = lameAlpha / 2.0 * M.trace() * M.trace() + lameBeta * (M * M).trace();
+    double svnorm =
+        lameAlpha / 2.0 * M.trace() * M.trace() + lameBeta * (M * M).trace();
     double coeff = thickness * thickness * thickness / 12.0;
     constexpr double PI = 3.1415926535898;
     double area = PI * curRadius * curHeight;
 
     result.exact = svnorm * coeff * area;
+
     return result;
 }
 

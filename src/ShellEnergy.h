@@ -246,12 +246,14 @@ public:
                     double h = ((LibShell::MonolayerRestState&)restState).thicknesses[face];
                     double lameAlpha = ((LibShell::MonolayerRestState&)restState).lameAlpha[face];
                     double lameBeta = ((LibShell::MonolayerRestState&)restState).lameBeta[face];
-                    double weight = h * h * h / 12.0 * (lameAlpha / 2.0 + lameBeta);
+                    double weight = h * h * h / 12.0 * (lameAlpha + 2.0 * lameBeta);
                     double area = 0.5 * std::sqrt(((LibShell::MonolayerRestState&)restState).abars[face].determinant());
                     eweight += area * weight;
                     earea += area;
                 }
-                Eigen::Matrix4d Q = eweight / earea * 3.0 / earea * K * K.transpose();
+
+                // each face will be accounted for three times, therefore the division by 3 (making the 3.0 / earea * K * K.transpose() to 1.0 / earea * K * K.transpose())
+                Eigen::Matrix4d Q = eweight / earea * 1.0 / earea * K * K.transpose();
                 for (int j = 0; j < 4; j++)
                 {
                     for (int k = 0; k < 4; k++)
@@ -273,7 +275,7 @@ public:
                 for (int j = 0; j < 3; j++)
                 {
                     bendingMcoeffs_.push_back({ 3 * (int)it.row() + j, 3 * (int)it.col() + j, it.value() });
-                }                
+                }
             }
         }
 

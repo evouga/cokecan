@@ -11,6 +11,7 @@
 #include "../include/TensionFieldStVKMaterial.h"
 #include "../include/NeoHookeanMaterial.h"
 #include "../include/RestState.h"
+#include "../include/StVKMaterial.h"
 #include "igl/readOBJ.h"
 #include <set>
 #include <vector>
@@ -51,6 +52,8 @@ struct Energies
     double quadraticbending;
     double neohookean;
     double neohookeandir;
+    double stvk;
+    double stvkdir;
 };
 
 void optimizeEdgeDOFs(ShellEnergy& energy, const Eigen::MatrixXd& curPos, Eigen::VectorXd& edgeDOFs)
@@ -71,6 +74,8 @@ void optimizeEdgeDOFs(ShellEnergy& energy, const Eigen::MatrixXd& curPos, Eigen:
     Eigen::SparseMatrix<double> I(nedgedofs, nedgedofs);
     I.setFromTriplets(Icoeffs.begin(), Icoeffs.end());
 
+    Eigen::SparseMatrix<double> PT = P.transpose();
+
     double reg = 1e-6;
     while (true)
     {
@@ -82,8 +87,9 @@ void optimizeEdgeDOFs(ShellEnergy& energy, const Eigen::MatrixXd& curPos, Eigen:
         if (PF.norm() < tol)
             return;
         Eigen::SparseMatrix<double> H(nposdofs + nedgedofs, nposdofs + nedgedofs);
-        Eigen::SparseMatrix<double> PTHP = P.transpose() * H * P;
-        Eigen::SparseMatrix<double> M = PTHP + reg * I;
+
+        Eigen::SparseMatrix<double> PHPT = P * H * PT;
+        Eigen::SparseMatrix<double> M = PHPT + reg * I;
         Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver(M);
         Eigen::VectorXd update = solver.solve(-PF);
         if (solver.info() != Eigen::Success) {
@@ -144,6 +150,9 @@ Energies measureEnergy(
     LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::firstFundamentalForms(mesh, restPos, dirrestState.abars);
     LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::secondFundamentalForms(mesh, restPos, diredgeDOFs, dirrestState.bbars);
 
+    std::vector<Eigen::Matrix2d> cur_bs;
+    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::secondFundamentalForms(mesh, curPos, edgeDOFs, cur_bs);
+
     // Make the half-cylinder rest-flat
     for (int i = 0; i < mesh.nFaces(); i++)
         restState.bbars[i].setZero();
@@ -153,9 +162,11 @@ Energies measureEnergy(
     NeohookeanShellEnergy nhenergyModel(mesh, restState);
     NeohookeanDirectorShellEnergy nhdenergyModel(mesh, dirrestState);
     QuadraticBendingShellEnergy qbenergyModel(mesh, restState, restPos, restEdgeDOFs);
+    StVKShellEnergy stvkenergyModel(mesh, restState);
+    StVKDirectorShellEnergy stvkdenergyModel(mesh, dirrestState);
 
-    Eigen::VectorXd nhF;
-    Eigen::VectorXd nhdF;
+    Eigen::VectorXd nhF, stvkF;
+    Eigen::VectorXd nhdF, stvkdF;
     Eigen::VectorXd qbF;
 
     optimizeEdgeDOFs(nhdenergyModel, curPos, diredgeDOFs);
@@ -163,6 +174,8 @@ Energies measureEnergy(
     result.neohookean = nhenergyModel.elasticEnergy(curPos, edgeDOFs, true, &nhF, NULL);
     result.neohookeandir = nhdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, &nhdF, NULL);
     result.quadraticbending = qbenergyModel.elasticEnergy(curPos, edgeDOFs, true, &qbF, NULL);
+    result.stvk = stvkenergyModel.elasticEnergy(curPos, edgeDOFs, true, &stvkF, NULL);
+    result.stvkdir = stvkdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, &stvkdF, NULL);
 
     int nverts = curPos.rows();
     nhForces.resize(nverts, 3);
@@ -192,13 +205,11 @@ Energies measureEnergy(
 
     Eigen::Matrix2d M = abar.inverse() * b;
     double svnorm = lameAlpha / 2.0 * M.trace() * M.trace() + lameBeta * (M * M).trace();
-    double coeff = thickness * thickness * thickness / 24.0;
+    double coeff = thickness * thickness * thickness / 12.0;
     constexpr double PI = 3.1415926535898;
     double area = PI * curRadius * curHeight;
 
     result.exact = svnorm * coeff * area;
-
-
     return result;
 }
 
@@ -241,10 +252,11 @@ int main(int argc, char* argv[])
     int steps = 5;
     double multiplier = 4;
     std::ofstream log("log.txt");
+    log << "#V, exact energy, NH energy, NH_dir energy, StVK energy, StVK_dir energy, quadratic" << std::endl;
     for (int step = 0; step < steps; step++)
     {
         curenergies = measureEnergy(mesh, origV, rolledV, thickness, lameAlpha, lameBeta, curRadius, curHeight, nhForces, qbForces);
-        log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.quadraticbending << std::endl;
+        log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
         triangleArea *= multiplier;
         makeHalfCylinder(regular, cokeRadius, cokeHeight, triangleArea, origV, rolledV, F);
         mesh = LibShell::MeshConnectivity(F);

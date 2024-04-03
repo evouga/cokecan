@@ -80,6 +80,61 @@ public:
     LibShell::NeoHookeanMaterial<LibShell::MidedgeAngleTanFormulation> mat_;
 };
 
+class StVKShellEnergy : public ShellEnergy
+{
+  public:
+    StVKShellEnergy(
+        const LibShell::MeshConnectivity& mesh,
+        const LibShell::RestState& restState
+        )
+        : mesh_(mesh), restState_(restState), mat_() {}
+
+    virtual double elasticEnergy(
+        const Eigen::MatrixXd& curPos,
+        const Eigen::VectorXd& curEdgeDOFs,
+        bool bendingOnly,
+        Eigen::VectorXd* derivative,
+        std::vector<Eigen::Triplet<double> >* hessian) const
+    {
+        int whichTerms = LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_BENDING;
+        if(!bendingOnly)
+            whichTerms |= LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::EnergyTerm::ET_STRETCHING;
+        return LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, whichTerms, derivative, hessian);
+    }
+
+    const LibShell::MeshConnectivity& mesh_;
+    const LibShell::RestState& restState_;
+    LibShell::StVKMaterial<LibShell::MidedgeAverageFormulation> mat_;
+};
+
+class StVKDirectorShellEnergy : public ShellEnergy
+{
+  public:
+    StVKDirectorShellEnergy(
+        const LibShell::MeshConnectivity& mesh,
+        const LibShell::RestState& restState
+        )
+        : mesh_(mesh), restState_(restState), mat_() {}
+
+    virtual double elasticEnergy(
+        const Eigen::MatrixXd& curPos,
+        const Eigen::VectorXd& curEdgeDOFs,
+        bool bendingOnly,
+        Eigen::VectorXd* derivative,
+        std::vector<Eigen::Triplet<double> >* hessian) const
+    {
+        int whichTerms = LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::EnergyTerm::ET_BENDING;
+        if (!bendingOnly)
+            whichTerms |= LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::EnergyTerm::ET_STRETCHING;
+        return LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, whichTerms, derivative, hessian);
+    }
+
+    const LibShell::MeshConnectivity& mesh_;
+    const LibShell::RestState& restState_;
+    LibShell::StVKMaterial<LibShell::MidedgeAngleTanFormulation> mat_;
+};
+
+
 class QuadraticExpansionShellEnergy : public ShellEnergy
 {
 public:

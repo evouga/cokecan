@@ -16,7 +16,7 @@ find_package(Polyscope REQUIRED)
 find_package(Libshell REQUIRED)
 
 
-file(GLOB SRCFILES src/*.cpp src/*.h src/*.hpp)	  
+file(GLOB SRCFILES src/*.cpp src/*.h src/*.hpp src/quickhull/*.cpp src/quickhull/*.hpp)	  
 
 add_executable(${PROJECT_NAME} ${SRCFILES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${EIGEN3_INCLUDE_DIR} ${LIBSHELL_INCLUDE_DIR})

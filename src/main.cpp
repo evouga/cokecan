@@ -4,6 +4,7 @@
 #include "../include/ElasticShell.h"
 #include "StaticSolve.h"
 #include "HalfCylinder.h"
+#include "Sphere.h"
 #include "../include/MidedgeAngleTanFormulation.h"
 #include "../include/MidedgeAngleSinFormulation.h"
 #include "../include/MidedgeAverageFormulation.h"
@@ -357,14 +358,16 @@ int main(int argc, char* argv[])
     log << "#V, exact energy, NH energy, NH_dir energy, StVK energy, StVK_dir energy, quadratic" << std::endl;
     if (curMeshType == MeshType::MT_SPHERE)
     {
-        if (!igl::readOBJ("../meshes/sphere.obj", origV, F))
-        {
-            if (!igl::readOBJ("../meshes/sphere.obj", origV, F))
-                exit(-1);
-        }
+        makeSphere(sphereRadius, triangleArea, origV, F);
         LibShell::MeshConnectivity mesh(F);
-        curenergies = measureSphereEnergy(mesh, origV, thickness, lameAlpha, lameBeta, 1.0);
-        log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
+        for (int step = 0; step < steps; step++)
+        {
+            curenergies = measureSphereEnergy(mesh, origV, thickness, lameAlpha, lameBeta, sphereRadius);
+            log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
+            triangleArea *= multiplier;
+            makeSphere(sphereRadius, triangleArea, origV, F);
+            LibShell::MeshConnectivity mesh(F);
+        }
     }
     else
     {

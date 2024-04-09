@@ -85,7 +85,7 @@ void optimizeEdgeDOFs(ShellEnergy& energy, const Eigen::MatrixXd& curPos, Eigen:
         Eigen::VectorXd F;
         double origEnergy = energy.elasticEnergy(curPos, edgeDOFs, true, &F, &Hcoeffs);
         Eigen::VectorXd PF = P * F;
-        std::cout << "Force resid now: " << PF.norm() << std::endl;
+        std::cout << "Force resid now: " << PF.norm() << ", energy: " << origEnergy << ", reg: " << reg << std::endl;
         if (PF.norm() < tol)
             return;
         Eigen::SparseMatrix<double> H(nposdofs + nedgedofs, nposdofs + nedgedofs);

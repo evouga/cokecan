@@ -60,7 +60,7 @@ struct Energies
 
 void optimizeEdgeDOFs(ShellEnergy& energy, const Eigen::MatrixXd& curPos, Eigen::VectorXd& edgeDOFs)
 {
-    double tol = 1e-6;
+    double tol = 1e-5;
     int nposdofs = curPos.rows() * 3;
     int nedgedofs = edgeDOFs.size();
 
@@ -366,8 +366,7 @@ int main(int argc, char* argv[])
             log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
             triangleArea *= multiplier;
             makeSphere(sphereRadius, triangleArea, origV, F);
-            LibShell::MeshConnectivity mesh(F);
-        }
+            mesh = LibShell::MeshConnectivity(F);        }
     }
     else
     {

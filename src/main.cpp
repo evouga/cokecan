@@ -54,6 +54,7 @@ struct Energies
     double quadraticbending;
     double neohookean;
     double neohookeandir;
+    double neohookeandirzero;
     double stvk;
     double stvkdir;
 };
@@ -131,8 +132,8 @@ Energies measureCylinderEnergy(
     LibShell::MidedgeAverageFormulation::initializeExtraDOFs(edgeDOFs, mesh,
                                                              restPos);
 
-    Eigen::VectorXd diredgeDOFs;
-    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(diredgeDOFs, mesh,
+    Eigen::VectorXd zerodiredgeDOFs;
+    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(zerodiredgeDOFs, mesh,
                                                               restPos);
 
     // initialize the rest geometry of the shell
@@ -155,7 +156,7 @@ Energies measureCylinderEnergy(
     LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::
         firstFundamentalForms(mesh, restPos, dirrestState.abars);
     LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::
-        secondFundamentalForms(mesh, restPos, diredgeDOFs, dirrestState.bbars);
+        secondFundamentalForms(mesh, restPos, zerodiredgeDOFs, dirrestState.bbars);
 
     std::vector<Eigen::Matrix2d> cur_bs;
     LibShell::ElasticShell<
@@ -181,12 +182,15 @@ Energies measureCylinderEnergy(
     Eigen::VectorXd nhdF, stvkdF;
     Eigen::VectorXd qbF;
 
+    Eigen::VectorXd diredgeDOFs = zerodiredgeDOFs;
     optimizeEdgeDOFs(nhdenergyModel, curPos, diredgeDOFs);
 
     result.neohookean =
         nhenergyModel.elasticEnergy(curPos, edgeDOFs, true, &nhF, NULL);
     result.neohookeandir =
         nhdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, &nhdF, NULL);
+    result.neohookeandirzero =
+        nhdenergyModel.elasticEnergy(curPos, zerodiredgeDOFs, true, &nhdF, NULL);
     result.quadraticbending =
         qbenergyModel.elasticEnergy(curPos, edgeDOFs, true, &qbF, NULL);
     result.stvk =
@@ -245,8 +249,8 @@ Energies measureSphereEnergy(
     LibShell::MidedgeAverageFormulation::initializeExtraDOFs(edgeDOFs, mesh,
         curPos);
 
-    Eigen::VectorXd diredgeDOFs;
-    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(diredgeDOFs, mesh,
+    Eigen::VectorXd zerodiredgeDOFs;
+    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(zerodiredgeDOFs, mesh,
         curPos);
 
     // initialize the rest geometry of the shell
@@ -269,7 +273,7 @@ Energies measureSphereEnergy(
     LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::
         firstFundamentalForms(mesh, curPos, dirrestState.abars);
     LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::
-        secondFundamentalForms(mesh, curPos, diredgeDOFs, dirrestState.bbars);
+        secondFundamentalForms(mesh, curPos, zerodiredgeDOFs, dirrestState.bbars);
 
 
     // Make the half-cylinder rest-flat
@@ -288,12 +292,15 @@ Energies measureSphereEnergy(
     StVKShellEnergy stvkenergyModel(mesh, restState);
     StVKDirectorShellEnergy stvkdenergyModel(mesh, dirrestState);
 
+    Eigen::VectorXd diredgeDOFs = zerodiredgeDOFs;
     optimizeEdgeDOFs(nhdenergyModel, curPos, diredgeDOFs);
 
     result.neohookean =
         nhenergyModel.elasticEnergy(curPos, edgeDOFs, true, NULL, NULL);
     result.neohookeandir =
         nhdenergyModel.elasticEnergy(curPos, diredgeDOFs, true, NULL, NULL);
+    result.neohookeandirzero =
+        nhdenergyModel.elasticEnergy(curPos, zerodiredgeDOFs, true, NULL, NULL);
     result.quadraticbending =
         qbenergyModel.elasticEnergy(curPos, edgeDOFs, true, NULL, NULL);
     result.stvk =
@@ -355,18 +362,23 @@ int main(int argc, char* argv[])
     int steps = 5;
     double multiplier = 4;
     std::ofstream log("log.txt");
-    log << "#V, exact energy, NH energy, NH_dir energy, StVK energy, StVK_dir energy, quadratic" << std::endl;
+    log << "#V, exact energy, NH energy, NH_dir energy, NH_dir_zero energy, StVK energy, StVK_dir energy, quadratic" << std::endl;
     if (curMeshType == MeshType::MT_SPHERE)
     {
         makeSphere(sphereRadius, triangleArea, origV, F);
         LibShell::MeshConnectivity mesh(F);
         for (int step = 0; step < steps; step++)
         {
+            std::stringstream ss;
+            ss << "sphere_ " << step << ".ply";
+            igl::writePLY(ss.str(), origV, F);
+
             curenergies = measureSphereEnergy(mesh, origV, thickness, lameAlpha, lameBeta, sphereRadius);
-            log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
+            log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.neohookeandirzero << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
             triangleArea *= multiplier;
             makeSphere(sphereRadius, triangleArea, origV, F);
-            mesh = LibShell::MeshConnectivity(F);        }
+            mesh = LibShell::MeshConnectivity(F);            
+        }
     }
     else
     {
@@ -375,7 +387,7 @@ int main(int argc, char* argv[])
         for (int step = 0; step < steps; step++)
         {
             curenergies = measureCylinderEnergy(mesh, origV, rolledV, thickness, lameAlpha, lameBeta, curRadius, curHeight, nhForces, qbForces);
-            log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
+            log << origV.rows() << ": " << curenergies.exact << " " << curenergies.neohookean << " " << curenergies.neohookeandir << " " << curenergies.neohookeandir << " " << curenergies.stvk << " " << curenergies.stvkdir << " " << curenergies.quadraticbending << std::endl;
             triangleArea *= multiplier;
             makeHalfCylinder(curMeshType == MeshType::MT_CYLINDER_REGULAR, cokeRadius, cokeHeight, triangleArea, origV, rolledV, F);
             mesh = LibShell::MeshConnectivity(F);

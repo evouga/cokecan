@@ -56,7 +56,7 @@ void runSimulation(
     // set uniform thicknesses
     restState.thicknesses.resize(mesh.nFaces(), thickness);
     restState.lameAlpha.resize(mesh.nFaces(), lameAlpha);
-    restState.lameBeta.resize(mesh.nFaces(), lameAlpha);
+    restState.lameBeta.resize(mesh.nFaces(), lameBeta);
 
     // initialize first and second fundamental forms to those of input mesh
     LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::firstFundamentalForms(mesh, curPos, restState.abars);

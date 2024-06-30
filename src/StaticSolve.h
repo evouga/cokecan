@@ -15,7 +15,8 @@ void takeOneStep(const ShellEnergy &energyModel,
     Eigen::VectorXd& curEdgeDOFs,
     const std::set<int> &fixed,
     double tol,
-    double& reg)
+    double& reg,
+    std::ostream *logfile)
 {
 
     int nverts = (int)curPos.rows();
@@ -45,6 +46,12 @@ void takeOneStep(const ShellEnergy &energyModel,
     }
     Eigen::SparseMatrix<double> P(freeDOFs, fullDOFs);
     P.setFromTriplets(Pcoeffs.begin(), Pcoeffs.end());
+
+    if (logfile)
+    {
+        *logfile << "Starting Static Solve" << std::endl;
+        *logfile << "Energy\t\tForce Residual\t\tNewton Decrement\t\tHessian Regularization" << std::endl;
+    }
 
     while (true)
     {
@@ -106,6 +113,8 @@ void takeOneStep(const ShellEnergy &energyModel,
             if (newenergy <= energy)
             {
                 std::cout << "Old energy: " << energy << " new energy: " << newenergy << " force residual " << forceResidual << " pos change " << descentDir.segment(0, 3 * nverts).norm() << " theta change " << descentDir.segment(3 * nverts, nedgedofs).norm() << " lambda " << reg << std::endl;
+                if (logfile)
+                    *logfile << newenergy << "\t\t" << forceResidual << "\t\t" << descentDir.norm() << "\t\t" << reg << std::endl;
                 curPos = newPos;
                 curEdgeDOFs = newEdgeDofs;
                 reg /= 2.0;

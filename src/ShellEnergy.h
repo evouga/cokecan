@@ -8,6 +8,7 @@
 #include "../include/MaterialModel.h"
 #include "../include/NeoHookeanMaterial.h"
 #include "../include/MidedgeAverageFormulation.h"
+#include "../include/MidedgeAngleTanFormulation.h"
 #include "../include/ElasticShell.h"
 #include "QuadraticBending.h"
 
@@ -36,12 +37,12 @@ public:
         Eigen::VectorXd* derivative, // positions, then thetas
         std::vector<Eigen::Triplet<double> >* hessian) const
     {
-        return LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, derivative, hessian);
+        return LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::elasticEnergy(mesh_, curPos, curEdgeDOFs, mat_, restState_, derivative, hessian);
     }
 
     const LibShell::MeshConnectivity& mesh_;
     const LibShell::RestState& restState_;
-    LibShell::NeoHookeanMaterial<LibShell::MidedgeAverageFormulation> mat_;
+    LibShell::NeoHookeanMaterial<LibShell::MidedgeAngleTanFormulation> mat_;
 };
 
 class QuadraticBendingShellEnergy : public ShellEnergy

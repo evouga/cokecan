@@ -16,6 +16,7 @@
 #include <vector>
 #include "ShellEnergy.h"
 #include "igl/writePLY.h"
+#include "FixedLoop.h"
 
 double cokeRadius;
 double cokeHeight;
@@ -47,7 +48,7 @@ void runSimulation(
 {
     // initialize default edge DOFs (edge director angles)
     Eigen::VectorXd edgeDOFs;
-    LibShell::MidedgeAverageFormulation::initializeExtraDOFs(edgeDOFs, mesh, curPos);
+    LibShell::MidedgeAngleTanFormulation::initializeExtraDOFs(edgeDOFs, mesh, curPos);
 
     // initialize the rest geometry of the shell
     LibShell::MonolayerRestState restState;
@@ -77,7 +78,11 @@ void runSimulation(
     NeohookeanShellEnergy energyModel(mesh, restState);
     //QuadraticBendingShellEnergy energyModel(mesh, restState, restPos, restEdgeDOFs);
 
+    std::ofstream logfile("log.txt");
     double reg = 1e-6;
+    logfile << "Running experiment: " << curPos.rows() << " verts, " << numSteps << " steps, tol = " << tol << ", reg = " << reg << std::endl;
+    igl::writePLY("step-0.ply", curPos, mesh.faces());
+
     for (int j = 1; j <= numSteps; j++)
     {
         double prevt = double(j - 1) / double(numSteps);
@@ -96,7 +101,7 @@ void runSimulation(
         for (int i : bottomVertices)
             curPos(i, 2) = 0;
 
-        takeOneStep(energyModel, curPos, edgeDOFs, fixed, tol, reg);
+        takeOneStep(energyModel, curPos, edgeDOFs, fixed, tol, reg, &logfile);
         std::stringstream filename;
         filename << "step-" << j << ".ply";
         igl::writePLY(filename.str(), curPos, mesh.faces());
@@ -105,6 +110,11 @@ void runSimulation(
         std::cout << "####################" << std::endl;
         polyscope::registerSurfaceMesh(filename.str(), curPos, mesh.faces());
     }
+}
+
+void subdivide(const Eigen::MatrixXd& origV, const Eigen::MatrixXi& origF, Eigen::MatrixXd& newV, Eigen::MatrixXi& newF)
+{
+    fixedLoop(origV, origF, newV, newF, 1);
 }
 
 int main(int argc, char* argv[])
@@ -143,6 +153,15 @@ int main(int argc, char* argv[])
             if (ImGui::Button("Retriangulate"))
             {
                 makeCylinder(cokeRadius, cokeHeight, triangleArea, origV, F);                
+            }
+            if (ImGui::Button("Loop Subdivide"))
+            {
+                Eigen::MatrixXd newV;
+                Eigen::MatrixXi newF;
+                subdivide(origV, F, newV, newF);
+                origV = newV;
+                F = newF;
+                polyscope::registerSurfaceMesh("Input Mesh", origV, F);
             }
         }
         if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))

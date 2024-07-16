@@ -59,8 +59,8 @@ void runSimulation(
     restState.lameBeta.resize(mesh.nFaces(), lameBeta);
 
     // initialize first and second fundamental forms to those of input mesh
-    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::firstFundamentalForms(mesh, curPos, restState.abars);
-    LibShell::ElasticShell<LibShell::MidedgeAverageFormulation>::secondFundamentalForms(mesh, curPos, edgeDOFs, restState.bbars);
+    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::firstFundamentalForms(mesh, curPos, restState.abars);
+    LibShell::ElasticShell<LibShell::MidedgeAngleTanFormulation>::secondFundamentalForms(mesh, curPos, edgeDOFs, restState.bbars);
 
     std::vector<int> topVertices;
     std::vector<int> bottomVertices;
@@ -75,7 +75,7 @@ void runSimulation(
     Eigen::MatrixXd restPos = curPos;
     Eigen::VectorXd restEdgeDOFs = edgeDOFs;
 
-    NeohookeanShellEnergy energyModel(mesh, restState);
+    NeohookeanDirectorShellEnergy energyModel(mesh, restState);
     //QuadraticBendingShellEnergy energyModel(mesh, restState, restPos, restEdgeDOFs);
 
     std::ofstream logfile("log.txt");
@@ -149,10 +149,11 @@ int main(int argc, char* argv[])
         {
             ImGui::InputDouble("Radius", &cokeRadius);
             ImGui::InputDouble("Height", &cokeHeight);
-            ImGui::InputDouble("Triangle Area", &triangleArea);
+            ImGui::InputDouble("Triangle Area", &triangleArea, 0.0, 0.0, "%.10f");
             if (ImGui::Button("Retriangulate"))
             {
-                makeCylinder(cokeRadius, cokeHeight, triangleArea, origV, F);                
+                makeCylinder(cokeRadius, cokeHeight, triangleArea, origV, F);
+                polyscope::registerSurfaceMesh("Input Mesh", origV, F);
             }
             if (ImGui::Button("Loop Subdivide"))
             {

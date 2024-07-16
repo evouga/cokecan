@@ -90,7 +90,7 @@ void optimizeEdgeDOFs(ShellEnergy& energy, const Eigen::MatrixXd& curPos, Eigen:
         if (PF.norm() < tol)
             return;
         Eigen::SparseMatrix<double> H(nposdofs + nedgedofs, nposdofs + nedgedofs);
-
+        H.setFromTriplets(Hcoeffs.begin(), Hcoeffs.end());
         Eigen::SparseMatrix<double> PHPT = P * H * PT;
         Eigen::SparseMatrix<double> M = PHPT + reg * I;
         Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver(M);
@@ -333,8 +333,10 @@ int main(int argc, char* argv[])
     cokeHeight = 0.122;
     sphereRadius = 0.05;
 
-    triangleArea = 0.000001;
+    triangleArea = 0.0000001;
 
+    //curMeshType = MeshType::MT_CYLINDER_REGULAR;
+    //curMeshType = MeshType::MT_CYLINDER_IRREGULAR;
     curMeshType = MeshType::MT_SPHERE;
     
     Energies curenergies;

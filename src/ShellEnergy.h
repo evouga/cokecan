@@ -216,68 +216,96 @@ public:
         int nfaces = mesh.nFaces();
         int nedges = mesh.nEdges();
 
-        std::vector<Eigen::Triplet<double> > biLcoeffs;
-        
+        Eigen::SparseMatrix<double> L;
+        igl::cotmatrix(restPos, mesh.faces(), L);
+        std::vector<Eigen::Triplet<double> > bigLcoeffs;
+        for (int k = 0; k < L.outerSize(); ++k)
+        {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(L, k); it; ++it)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    bigLcoeffs.push_back({ 3 * (int)it.row() + j, 3 * (int)it.col() + j, it.value() });
+                }
+            }
+        }
+
+        Eigen::SparseMatrix<double> bigL(3 * nverts, 3 * nverts);
+        bigL.setFromTriplets(bigLcoeffs.begin(), bigLcoeffs.end());
+
+        std::vector<bool> bdry(nverts);
+        std::vector<Eigen::Triplet<double> > Ncoeffs;
         for (int i = 0; i < nedges; i++)
         {
-            if (mesh.edgeFace(i, 0) != -1 && mesh.edgeFace(i, 1) != -1)
+            for (int side = 0; side < 2; side++)
             {
-                int v[4];
-                v[0] = mesh.edgeVertex(i, 0);
-                v[1] = mesh.edgeVertex(i, 1);
-                v[2] = mesh.edgeOppositeVertex(i, 0);
-                v[3] = mesh.edgeOppositeVertex(i, 1);
-                Eigen::Vector3d e10 = restPos.row(v[0]).transpose() - restPos.row(v[1]).transpose();
-                Eigen::Vector3d e12 = restPos.row(v[2]).transpose() - restPos.row(v[1]).transpose();
-                Eigen::Vector3d e13 = restPos.row(v[3]).transpose() - restPos.row(v[1]).transpose();
-                double c03 = e10.dot(e12) / e10.cross(e12).norm();
-                double c04 = e10.dot(e13) / e10.cross(e13).norm();
-                Eigen::Vector3d e01 = restPos.row(v[1]).transpose() - restPos.row(v[0]).transpose();
-                Eigen::Vector3d e02 = restPos.row(v[2]).transpose() - restPos.row(v[0]).transpose();
-                Eigen::Vector3d e03 = restPos.row(v[3]).transpose() - restPos.row(v[0]).transpose();
-                double c01 = e01.dot(e02) / e01.cross(e02).norm();
-                double c02 = e01.dot(e03) / e01.cross(e03).norm();
-                Eigen::Vector4d K(c03 + c04, c01 + c02, -c01 - c03, -c02 - c04);
-                double eweight = 0;
-                double earea = 0;
-                for (int j = 0; j < 2; j++)
+                if (mesh.edgeFace(i, 1-side) == -1)
                 {
-                    int face = mesh.edgeFace(i, j);
-                    double h = ((LibShell::MonolayerRestState&)restState).thicknesses[face];
-                    double lameAlpha = ((LibShell::MonolayerRestState&)restState).lameAlpha[face];
-                    double lameBeta = ((LibShell::MonolayerRestState&)restState).lameBeta[face];
-                    double weight = h * h * h / 12.0 * (lameAlpha + 2.0 * lameBeta);
-                    double area = 0.5 * std::sqrt(((LibShell::MonolayerRestState&)restState).abars[face].determinant());
-                    eweight += area * weight;
-                    earea += area;
-                }
-
-                // each face will be accounted for three times, therefore the division by 3 (making the 3.0 / earea * K * K.transpose() to 1.0 / earea * K * K.transpose())
-                Eigen::Matrix4d Q = eweight / earea * 1.0 / earea * K * K.transpose();
-                for (int j = 0; j < 4; j++)
-                {
-                    for (int k = 0; k < 4; k++)
+                    int oppvidx = mesh.edgeOppositeVertex(i, side);
+                    int v0idx = mesh.edgeVertex(i, 0);
+                    int v1idx = mesh.edgeVertex(i, 1);
+                    bdry[v0idx] = true;
+                    bdry[v1idx] = true;
+                    Eigen::Vector3d oppv = restPos.row(oppvidx).transpose();
+                    Eigen::Vector3d v0 = restPos.row(v0idx).transpose();
+                    Eigen::Vector3d v1 = restPos.row(v1idx).transpose();
+                    double cot0 = (oppv - v0).dot(v1 - v0) / (oppv - v0).cross(v1 - v0).norm();
+                    double cot1 = (oppv - v1).dot(v0 - v1) / (oppv - v1).cross(v0 - v1).norm();
+                    for (int j = 0; j < 3; j++)
                     {
-                        biLcoeffs.push_back({ v[j], v[k], Q(j,k) });
+                        Ncoeffs.push_back({ 3 * v0idx + j, 3 * v0idx + j, 0.5*cot1 });
+                        Ncoeffs.push_back({ 3 * v0idx + j, 3 * v1idx + j, 0.5*cot0 });
+                        Ncoeffs.push_back({ 3 * v0idx + j, 3 * oppvidx + j, 0.5*(-cot0 - cot1) });
+                        Ncoeffs.push_back({ 3 * v1idx + j, 3 * v0idx + j, 0.5*cot1 });
+                        Ncoeffs.push_back({ 3 * v1idx + j, 3 * v1idx + j, 0.5*cot0 });
+                        Ncoeffs.push_back({ 3 * v1idx + j, 3 * oppvidx + j, 0.5*(-cot0 - cot1) });
                     }
                 }
             }
         }
-        Eigen::SparseMatrix<double> biL(nverts, nverts);
-        biL.setFromTriplets(biLcoeffs.begin(), biLcoeffs.end());
+        Eigen::SparseMatrix<double> N(3 * nverts, 3 * nverts);
+        N.setFromTriplets(Ncoeffs.begin(), Ncoeffs.end());
+
+        std::vector<double> Mcoeffs(nverts);
+        std::vector<double> energycoeffs(nverts);
+        std::vector<Eigen::Triplet<double> > Minvcoeffs;
+
+        for (int i = 0; i < nfaces; i++)
+        {
+            double h = ((LibShell::MonolayerRestState&)restState).thicknesses[i];
+            double lameAlpha = ((LibShell::MonolayerRestState&)restState).lameAlpha[i];
+            double lameBeta = ((LibShell::MonolayerRestState&)restState).lameBeta[i];
+            double weight = h * h * h / 12.0 * (lameAlpha + 2.0 * lameBeta);
+            double area = 0.5 * std::sqrt(((LibShell::MonolayerRestState&)restState).abars[i].determinant());
+
+            for (int j = 0; j < 3; j++)
+            {
+                int vidx = mesh.faceVertex(i, j);
+                Mcoeffs[vidx] += area / 3.0;
+                energycoeffs[vidx] += weight * area / 3.0;
+            }
+        }
+        for (int i = 0; i < nverts; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                Minvcoeffs.push_back({ 3 * i + j, 3 * i + j, energycoeffs[i] / Mcoeffs[i] / Mcoeffs[i] });
+            }
+        }
+        Eigen::SparseMatrix<double> Minv(3 * nverts, 3 * nverts);
+        Minv.setFromTriplets(Minvcoeffs.begin(), Minvcoeffs.end());
+        
+        Eigen::SparseMatrix<double> biL = (bigL.transpose() + N.transpose()) * Minv * (bigL + N);
 
         bendingMcoeffs_.clear();
-
         for (int k = 0; k < biL.outerSize(); ++k)
         {
             for (Eigen::SparseMatrix<double>::InnerIterator it(biL, k); it; ++it)
             {
-                for (int j = 0; j < 3; j++)
-                {
-                    bendingMcoeffs_.push_back({ 3 * (int)it.row() + j, 3 * (int)it.col() + j, it.value() });
-                }
+                bendingMcoeffs_.push_back({ (int)it.row(), (int)it.col(), it.value() });
             }
         }
+       
 
         bendingM_.resize(3 * nverts, 3 * nverts);
         bendingM_.setFromTriplets(bendingMcoeffs_.begin(), bendingMcoeffs_.end());

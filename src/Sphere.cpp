@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include "Sphere.h"
 #include <random>
 #include "quickhull/QuickHull.hpp"

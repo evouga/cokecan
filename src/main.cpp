@@ -329,7 +329,7 @@ int main(int argc, char* argv[])
     triangleArea = 0.000001;
 
     curMeshType = MeshType::MT_SPHERE;
-
+    
     Energies curenergies;
     QBEnergy = 0;
 
